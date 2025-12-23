@@ -22,6 +22,6 @@ COPY . .
 RUN useradd --create-home --shell /bin/bash app && chown -R app:app /app
 USER app
 
-EXPOSE 8000
+EXPOSE 8080
 
 CMD ["python", "-m", "app.main"]

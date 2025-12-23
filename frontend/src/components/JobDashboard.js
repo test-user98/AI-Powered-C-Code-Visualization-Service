@@ -1,24 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api';
 
 function JobDashboard({ onJobSelected, onCreateJob, refreshTrigger }) {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [pollingJobs, setPollingJobs] = useState(new Set());
+  const wsRef = useRef(null);
 
   const fetchJobs = useCallback(async () => {
     try {
       const jobsData = await api.getJobs();
       setJobs(jobsData);
       setError(null);
-
-      // Start polling for in-progress jobs
-      const inProgressJobIds = jobsData
-        .filter(job => job.status === 'in_progress')
-        .map(job => job.id);
-
-      setPollingJobs(new Set(inProgressJobIds));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -26,42 +19,59 @@ function JobDashboard({ onJobSelected, onCreateJob, refreshTrigger }) {
     }
   }, []);
 
-  const pollJobProgress = useCallback(async (jobId) => {
-    try {
-      const jobDetails = await api.getJob(jobId);
-      setJobs(prevJobs =>
-        prevJobs.map(job =>
-          job.id === jobId ? jobDetails : job
-        )
-      );
+  const connectWebSocket = useCallback(() => {
+    const wsUrl = `ws://localhost:8080/ws/jobs`.replace('http', 'ws');
+    const ws = new WebSocket(wsUrl);
 
-      // Stop polling if job is complete
-      if (jobDetails.status !== 'in_progress') {
-        setPollingJobs(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(jobId);
-          return newSet;
-        });
+    ws.onopen = () => {
+      console.log('WebSocket connected for job updates');
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const update = JSON.parse(event.data);
+        if (update.type === 'job_update') {
+          // Update job status in the jobs list
+          setJobs(prevJobs =>
+            prevJobs.map(job =>
+              job.id === update.job_id
+                ? { ...job, status: update.status, processed_functions: update.processed_functions, updated_at: update.updated_at }
+                : job
+            )
+          );
+        }
+      } catch (err) {
+        console.error('Failed to parse WebSocket message:', err);
       }
-    } catch (err) {
-      console.error(`Error polling job ${jobId}:`, err);
-    }
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket disconnected, will reconnect...');
+      // Auto-reconnect after 5 seconds
+      setTimeout(connectWebSocket, 5000);
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+
+    wsRef.current = ws;
   }, []);
+
 
   useEffect(() => {
     fetchJobs();
-  }, [refreshTrigger, fetchJobs]); // Fetch jobs when component mounts or refresh is triggered
+    connectWebSocket();
+  }, [refreshTrigger, fetchJobs, connectWebSocket]); // Fetch jobs and connect WebSocket
 
   useEffect(() => {
-    if (pollingJobs.size === 0) return;
-
-    // Set up polling interval
-    const interval = setInterval(() => {
-      pollingJobs.forEach(jobId => pollJobProgress(jobId));
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [pollingJobs, pollJobProgress]); // Include pollJobProgress in dependencies
+    // Cleanup WebSocket on unmount
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, []);
 
   const handleJobClick = (job) => {
     if (job.status === 'success') {
