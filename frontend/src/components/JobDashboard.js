@@ -50,7 +50,7 @@ function JobDashboard({ onJobSelected, onCreateJob, refreshTrigger }) {
 
   useEffect(() => {
     fetchJobs();
-  }, [refreshTrigger]); // Fetch jobs when component mounts or refresh is triggered
+  }, [refreshTrigger, fetchJobs]); // Fetch jobs when component mounts or refresh is triggered
 
   useEffect(() => {
     if (pollingJobs.size === 0) return;
