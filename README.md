@@ -48,6 +48,12 @@ export PATH="$HOME/bin:$PATH"
 
 **Note:** ast-grep is optional. If not installed, the system will automatically fall back to regex-based function detection, which works reliably for most C code.
 
+**Useful links:**
+- **Mermaid**: [mermaid.live](https://mermaid.live)
+- **Mermaid flowchart documentation**: [Mermaid Docs](https://mermaid.js.org/)
+- **Ast-grep**: [ast-grep.github.io](https://ast-grep.github.io/)
+- **Ast-grep Python API**: [PyPI](https://pypi.org/project/ast-grep/)
+
 4. Install mermaid-cli:
 ```bash
 npm install -g @mermaid-js/mermaid-cli
@@ -156,7 +162,7 @@ npm install
 npm start
 ```
 
-The frontend will be available at `http://localhost:3000` and connects to the backend at `http://localhost:8081`.
+The frontend will be available at `http://localhost:3000` and connects to the backend at `http://localhost:8080`.
 
 ## Architecture
 

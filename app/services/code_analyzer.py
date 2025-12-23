@@ -3,31 +3,14 @@ import json
 import os
 import tempfile
 import re
-from typing import List, Optional
-import openai
-from dotenv import load_dotenv
+from typing import List
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Load environment variables
-try:
-    load_dotenv()
-except Exception as e:
-    # Ignore dotenv loading errors in sandboxed environments
-    logger.warning(f"Could not load .env file: {e}")
-
 class CodeAnalyzer:
     def __init__(self):
-        try:
-            self.openai_client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        except TypeError as e:
-            if "proxies" in str(e):
-                import httpx
-                http_client = httpx.Client()
-                self.openai_client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"), http_client=http_client)
-            else:
-                raise e
+        pass
         
     def find_functions(self, code: str) -> List[str]:
         """Use ast-grep to find all function definitions in C code"""
@@ -392,26 +375,6 @@ class CodeAnalyzer:
 
         return end_node, node_counter
 
-    def _find_ast_grep(self) -> str:
-        """Find ast-grep executable"""
-        ast_grep_paths = [
-            'ast-grep',  # System PATH
-            './ast-grep',  # Current directory
-            '/usr/local/bin/ast-grep',  # Common Linux/Mac location
-            '/opt/homebrew/bin/ast-grep',  # Homebrew location
-            '/usr/bin/ast-grep',  # Another common location
-            '/opt/local/bin/ast-grep',  # MacPorts location
-        ]
-
-        for path in ast_grep_paths:
-            try:
-                test_result = subprocess.run([path, '--version'],
-                                           capture_output=True, timeout=5)
-                if test_result.returncode == 0:
-                    return path
-            except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-                continue
-        return None
 
     def _generate_basic_mermaid(self, function_name: str) -> str:
         """Generate a basic Mermaid diagram as fallback"""
@@ -419,80 +382,3 @@ class CodeAnalyzer:
     A[{function_name}] --> B[Process]
     B --> C[Return]"""
     
-    def validate_mermaid_syntax(self, mermaid_code: str) -> bool:
-        """Validate Mermaid syntax using mermaid-cli"""
-        try:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.mmd', delete=False) as f:
-                f.write(mermaid_code)
-                temp_file = f.name
-            
-            try:
-                # Use mermaid-cli to validate via npx (no global installation needed)
-                cmd = ['npx', '--yes', '@mermaid-js/mermaid-cli@latest', '--input', temp_file, '--output', '/dev/null', '--configFile', '/dev/null']
-
-                result = subprocess.run(cmd, capture_output=True, timeout=10)
-                
-                # mmdc returns 0 on success, non-zero on error
-                return result.returncode == 0
-                
-            except FileNotFoundError:
-                # mermaid-cli not available, do basic validation
-                logger.warning("mermaid-cli not available, using basic validation")
-                return self._basic_mermaid_validation(mermaid_code)
-            finally:
-                os.unlink(temp_file)
-                
-        except Exception as e:
-            logger.error(f"Error validating Mermaid syntax: {e}")
-            return False
-    
-    def _basic_mermaid_validation(self, mermaid_code: str) -> bool:
-        """Basic Mermaid syntax validation"""
-        lines = mermaid_code.strip().split('\n')
-        if not lines:
-            return False
-        
-        # Check if it starts with flowchart
-        if not lines[0].startswith('flowchart'):
-            return False
-        
-        # Basic structure check
-        has_connections = False
-        for line in lines[1:]:
-            line = line.strip()
-            if '-->' in line or '---' in line:
-                has_connections = True
-                break
-        
-        return has_connections
-    
-    def fix_mermaid_diagram(self, mermaid_code: str) -> str:
-        """Try to fix invalid Mermaid syntax using LLM"""
-        try:
-            prompt = f"""The following Mermaid diagram has syntax errors. Please fix them and return a valid Mermaid flowchart:
-
-```
-{mermaid_code}
-```
-
-Return ONLY the corrected Mermaid syntax, no explanations."""
-
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": "You are an expert at fixing Mermaid diagram syntax errors."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=1000,
-                temperature=0.1
-            )
-            
-            fixed_code = response.choices[0].message.content.strip()
-            fixed_code = re.sub(r'```mermaid\s*', '', fixed_code)
-            fixed_code = re.sub(r'```\s*$', '', fixed_code)
-            
-            return fixed_code.strip()
-            
-        except Exception as e:
-            logger.error(f"Error fixing Mermaid diagram: {e}")
-            return mermaid_code
