@@ -60,9 +60,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Root package files (these are for frontend)
-package.json
-package-lock.json
+# Root package files (not used in this project)
+/package.json
+/package-lock.json
 
 # React build output
 frontend/build/
