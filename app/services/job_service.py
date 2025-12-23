@@ -4,8 +4,17 @@ from typing import Dict, List
 from datetime import datetime
 from app.models.job import Job, JobStatus, FunctionResult
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
+
+# Import manager for broadcasting (avoid circular import)
+def get_manager():
+    try:
+        from app.main import manager
+        return manager
+    except ImportError:
+        return None
 
 class JobService:
     def __init__(self):
@@ -42,6 +51,24 @@ class JobService:
         with self.lock:
             job.updated_at = datetime.now()
             self.jobs[job.id] = job
+
+        # Broadcast job update to connected WebSocket clients
+        try:
+            manager = get_manager()
+            if manager:
+                # Create update message
+                update_message = {
+                    "type": "job_update",
+                    "job_id": job.id,
+                    "status": job.status.value,
+                    "total_functions": job.total_functions,
+                    "processed_functions": job.processed_functions,
+                    "updated_at": job.updated_at.isoformat()
+                }
+                # Schedule broadcast in event loop
+                asyncio.create_task(manager.broadcast(update_message))
+        except Exception as e:
+            logger.error(f"Failed to broadcast job update: {e}")
 
     def start_worker(self):
         """Start the background worker thread"""
