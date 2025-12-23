@@ -58,7 +58,7 @@ function JobDashboard({ onJobSelected, onCreateJob, refreshTrigger }) {
     // Set up polling interval
     const interval = setInterval(() => {
       pollingJobs.forEach(jobId => pollJobProgress(jobId));
-    }, 2000); // Poll every 2 seconds
+    }, 5000); // Poll every 5 seconds (more reasonable for UX)
 
     return () => clearInterval(interval);
   }, [pollingJobs, pollJobProgress]); // Include pollJobProgress in dependencies
