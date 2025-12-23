@@ -24,11 +24,11 @@ A React frontend for the C Code Analyzer API that provides an interactive interf
    The frontend will be available at `http://localhost:3000`
 
 3. **Ensure the backend is running:**
-   Make sure the backend server is running on `http://localhost:8081`
+   Make sure the backend server is running on `http://localhost:8080`
 
 ## API Configuration
 
-The frontend is configured to connect to the backend at `http://localhost:8081`. To change this:
+The frontend is configured to connect to the backend at `http://localhost:8080`. To change this:
 
 1. Create a `.env` file in the frontend directory:
    ```
