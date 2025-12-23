@@ -5,10 +5,11 @@ A FastAPI backend service for analyzing C code and generating Mermaid flowcharts
 ## Features
 
 - Asynchronous job processing for C code analysis
-- Function detection using ast-grep
-- Mermaid diagram generation using OpenAI GPT
-- Diagram validation with mermaid-cli
+- Function detection using ast-grep (with regex fallback)
+- Mermaid diagram generation using AST traversal
+- Real-time updates via WebSockets (no polling)
 - RESTful API with progress tracking
+- Docker containerization for easy deployment
 
 ## Setup
 
@@ -140,8 +141,34 @@ Get detailed information about a specific job.
     }
   ],
   "error_message": null
+
 }
 ```
+
+## Real-time Updates
+
+The API provides real-time job status updates via WebSockets:
+
+### WebSocket Endpoint
+- `WS /ws/jobs` - Real-time job status updates
+
+### WebSocket Message Format
+```json
+{
+  "type": "job_update",
+  "job_id": "uuid",
+  "status": "in_progress|success|failed",
+  "total_functions": 3,
+  "processed_functions": 2,
+  "updated_at": "2025-12-23T09:18:45.123456"
+}
+```
+
+**Benefits:**
+- No polling required
+- Instant status updates
+- Reduced server load
+- Better user experience
 
 ## Development
 
