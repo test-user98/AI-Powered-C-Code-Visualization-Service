@@ -85,6 +85,7 @@ The application consists of two services:
 - **Volume Mounting**: Development-friendly code mounting
 - **Network Isolation**: Secure inter-service communication
 - **Automatic Restarts**: Fault-tolerant deployment
+- **ast-grep Integration**: Advanced C code analysis included
 
 ### Production Deployment
 

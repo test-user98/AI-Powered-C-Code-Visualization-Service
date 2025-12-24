@@ -76,6 +76,8 @@ setup_docker() {
 
     print_success "🎉 Docker setup complete!"
     echo ""
+    echo "✅ Includes ast-grep for advanced C code analysis"
+    echo ""
     echo "🌐 Access your application:"
     echo "   Frontend: http://localhost:3000"
     echo "   Backend API: http://localhost:8080"
