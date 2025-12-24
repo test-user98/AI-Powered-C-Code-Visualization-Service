@@ -1,17 +1,104 @@
-# C Code Analyzer Backend
+# C Code Analyzer
 
-A FastAPI backend service for analyzing C code and generating Mermaid flowcharts for functions.
+A full-stack web application for analyzing C code and generating interactive Mermaid flowcharts for functions.
+
+## 🚀 Quick Start (Docker - Recommended for External Users)
+
+The easiest way to run the complete application is using Docker:
+
+```bash
+# Clone the repository
+git clone https://github.com/test-user98/AI-Powered-C-Code-Visualization-Service.git
+cd c-code-analyzer-backend
+
+# Run the automated setup script
+./setup.sh
+
+# Or manually:
+# docker-compose build
+# docker-compose up -d
+
+# Access the application:
+# Frontend: http://localhost:3000
+# Backend API: http://localhost:8080
+```
+
+That's it! The application will be running with:
+- ✅ Backend API (FastAPI)
+- ✅ Frontend UI (React)
+- ✅ Real-time WebSocket updates
+- ✅ All dependencies pre-installed
 
 ## Features
 
-- Asynchronous job processing for C code analysis
-- Function detection using ast-grep (with regex fallback)
-- Mermaid diagram generation using AST traversal
-- Real-time updates via WebSockets (no polling)
-- RESTful API with progress tracking
-- Docker containerization for easy deployment
+- 🔄 **Asynchronous job processing** for C code analysis
+- 🎯 **Smart function detection** using ast-grep (with regex fallback)
+- 📊 **Mermaid diagram generation** using AST traversal
+- ⚡ **Real-time updates** via WebSockets (no polling)
+- 🌐 **RESTful API** with progress tracking
+- 🐳 **Docker containerization** for easy deployment
+- 🎨 **Interactive frontend** with live progress updates
 
-## Setup
+## 🐳 Docker Setup (Detailed)
+
+### Prerequisites
+- Docker Engine 20.10+
+- Docker Compose 2.0+
+
+### Quick Docker Commands
+
+```bash
+# Build and start all services
+docker-compose up --build
+
+# Run in background
+docker-compose up -d --build
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+
+# Rebuild after code changes
+docker-compose up --build --force-recreate
+```
+
+### Service Architecture
+
+The application consists of two services:
+
+1. **Backend** (FastAPI)
+   - Port: 8080
+   - Handles C code analysis and Mermaid generation
+   - Uses WebSocket for real-time updates
+   - Health check endpoint: `GET /`
+
+2. **Frontend** (React)
+   - Port: 3000
+   - Modern React UI with live progress updates
+   - Communicates with backend via REST API and WebSockets
+
+### Container Features
+
+- **Health Checks**: Automatic service health monitoring
+- **Volume Mounting**: Development-friendly code mounting
+- **Network Isolation**: Secure inter-service communication
+- **Automatic Restarts**: Fault-tolerant deployment
+
+### Production Deployment
+
+For production, use the optimized build:
+
+```bash
+# Build for production
+docker-compose -f docker-compose.yml up --build -d
+
+# The frontend container serves optimized static files
+# Backend runs with production settings
+```
+
+## 💻 Local Development Setup
 
 ### Prerequisites
 
