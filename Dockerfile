@@ -6,9 +6,11 @@ RUN apt-get update && apt-get install -y \
     npm \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl -L https://github.com/ast-grep/ast-grep/releases/latest/download/ast-grep-linux-x86_64.tar.gz | tar xz && \
-    mv ast-grep /usr/local/bin/ && \
-    chmod +x /usr/local/bin/ast-grep
+RUN curl -L https://github.com/ast-grep/ast-grep/releases/download/0.27.3/ast-grep-v0.27.3-x86_64-unknown-linux-gnu.tar.gz | \
+    tar xz && \
+    mv ast-grep-v0.27.3-x86_64-unknown-linux-gnu/ast-grep /usr/local/bin/ && \
+    chmod +x /usr/local/bin/ast-grep && \
+    rm -rf ast-grep-v0.27.3-x86_64-unknown-linux-gnu
 
 RUN npm install -g @mermaid-js/mermaid-cli
 
