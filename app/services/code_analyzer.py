@@ -14,43 +14,19 @@ class CodeAnalyzer:
         
     def find_functions(self, code: str) -> List[str]:
         """Use ast-grep to find all function definitions in C code"""
-        # Check for ast-grep in multiple locations
-        ast_grep_paths = [
-            'ast-grep',  # System PATH
-            './ast-grep',  # Current directory
-            '/usr/local/bin/ast-grep',  # Common Linux/Mac location
-            '/opt/homebrew/bin/ast-grep',  # Homebrew location
-            '/usr/bin/ast-grep',  # Another common location
-            '/opt/local/bin/ast-grep',  # MacPorts location
-        ]
-
-        ast_grep_cmd = None
-        for path in ast_grep_paths:
-            try:
-                # Test if ast-grep is available at this path
-                test_result = subprocess.run([path, '--version'],
-                                           capture_output=True, timeout=5)
-                if test_result.returncode == 0:
-                    ast_grep_cmd = path
-                    logger.info(f"Found ast-grep at: {path}")
-                    break
-            except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-                continue
-
+        ast_grep_cmd = self._find_ast_grep()
+        
         if not ast_grep_cmd:
             logger.info("ast-grep not found in any of the checked locations, using regex fallback for function detection")
             return self._fallback_function_extraction(code)
 
         try:
-            # Create a temporary file with the code
             with tempfile.NamedTemporaryFile(mode='w', suffix='.c', delete=False) as f:
                 f.write(code)
                 temp_file = f.name
 
             try:
-                # Simple and reliable pattern for C function declarations
-                # Pattern: return_type function_name(parameters) { ... }
-                # Using ast-grep's pattern syntax
+
                 pattern = '$_ $FUNCNAME($_) { $$$ }'
 
                 cmd = [
@@ -121,14 +97,12 @@ class CodeAnalyzer:
     
     def _fallback_function_extraction(self, code: str) -> List[str]:
         """Simple regex-based function extraction"""
-        # Simple pattern: return_type function_name(parameters) {
         pattern = r'^\s*(?:int|void|char|float|double)\s+(\w+)\s*\([^)]*\)\s*\{'
         matches = re.findall(pattern, code, re.MULTILINE)
         functions = list(set(matches))  # Remove duplicates
         return functions
     
     def generate_mermaid_diagram(self, code: str, function_name: str) -> str:
-        """Generate a Mermaid flowchart for a specific function using AST traversal"""
         try:
             logger.info(f"Generating mermaid diagram for function: {function_name} using AST traversal")
 
@@ -144,7 +118,6 @@ class CodeAnalyzer:
             return self._generate_basic_mermaid(function_name)
     
     def _extract_function_code(self, code: str, function_name: str) -> str:
-        """Extract a specific function's code from the full source"""
         # Find the function definition
         pattern = rf'(\w+\s+)?{re.escape(function_name)}\s*\([^)]*\)\s*{{'
         match = re.search(pattern, code)
@@ -184,55 +157,48 @@ class CodeAnalyzer:
         
         return code[start_pos:]
     
+    def _find_ast_grep(self) -> str:
+        ast_grep_paths = [
+            'ast-grep',  # System PATH
+            './ast-grep',  # Current directory
+            '/usr/local/bin/ast-grep',  # Common Linux/Mac location
+            '/opt/homebrew/bin/ast-grep',  # Homebrew location
+            '/usr/bin/ast-grep',  # Another common location
+            '/opt/local/bin/ast-grep',  # MacPorts location
+        ]
+
+        for path in ast_grep_paths:
+            try:
+                test_result = subprocess.run([path, '--version'],
+                                           capture_output=True, timeout=5)
+                if test_result.returncode == 0:
+                    logger.info(f"Found ast-grep at: {path}")
+                    return path
+            except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+                continue
+        
+        return None
+
     def _generate_mermaid_from_ast(self, code: str, function_name: str) -> str:
         """Generate Mermaid diagram by analyzing control structures using ast-grep patterns"""
         ast_grep_cmd = self._find_ast_grep()
         if not ast_grep_cmd:
             raise Exception("ast-grep not available for AST traversal")
 
-        # Create temporary file
+        function_code = self._extract_function_code(code, function_name)
+        if not function_code:
+            raise Exception(f"Could not extract code for function {function_name}")
+
         with tempfile.NamedTemporaryFile(mode='w', suffix='.c', delete=False) as f:
-            f.write(code)
+            f.write(function_code)
             temp_file = f.name
 
         try:
-            # Extract function code first
-            function_code = self._extract_function_code(code, function_name)
-            if not function_code:
-                raise Exception(f"Could not extract code for function {function_name}")
-
-            # Build Mermaid diagram by analyzing different control structures
-            diagram_lines = [f"flowchart TD"]
-
-            # Start with function entry
-            diagram_lines.append(f"    START([{function_name} starts])")
-
-            # Find and process different control structures
-            structures = self._analyze_control_structures(function_code, ast_grep_cmd, temp_file)
-
-            if structures:
-                # Build the flow based on found structures
-                current_node = "START"
-                node_counter = 0
-
-                for struct_type, details in structures:
-                    if struct_type == 'if':
-                        current_node, node_counter = self._add_if_node(diagram_lines, current_node, node_counter, details)
-                    elif struct_type == 'for':
-                        current_node, node_counter = self._add_for_node(diagram_lines, current_node, node_counter, details)
-                    elif struct_type == 'while':
-                        current_node, node_counter = self._add_while_node(diagram_lines, current_node, node_counter, details)
-                    elif struct_type == 'return':
-                        current_node, node_counter = self._add_return_node(diagram_lines, current_node, node_counter, details)
-
-                # Connect to end
-                diagram_lines.append(f"    {current_node} --> END([{function_name} ends])")
-            else:
-                # Simple function with no control structures
-                diagram_lines.append("    START --> PROCESS[Process]")
-                diagram_lines.append("    PROCESS --> END([Function ends])")
-
-            return "\n".join(diagram_lines)
+            # Get all control structures with their positions
+            structures = self._analyze_control_structures_with_positions(function_code, ast_grep_cmd, temp_file)
+            
+            # Build diagram based on actual code flow
+            return self._build_flowchart_from_structures(function_name, structures, function_code)
 
         finally:
             try:
@@ -240,141 +206,230 @@ class CodeAnalyzer:
             except OSError:
                 pass
 
-    def _analyze_control_structures(self, function_code: str, ast_grep_cmd: str, temp_file: str) -> list:
-        """Analyze function code for control structures using ast-grep patterns"""
+    def _analyze_control_structures_with_positions(self, function_code: str, ast_grep_cmd: str, temp_file: str) -> list:
+        """Analyze function code for control structures with their positions using ast-grep"""
         structures = []
 
-        # Create a temporary file with just the function code for analysis
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.c', delete=False) as func_file:
-            func_file.write(function_code)
-            func_temp_file = func_file.name
-
         try:
+            # Use simpler patterns that ast-grep can match
             # Pattern for if statements
-            if_pattern = 'if ($CONDITION) $BODY'
-            result = subprocess.run([ast_grep_cmd, 'run', '--pattern', if_pattern, '--lang', 'c', '--json', func_temp_file],
-                                  capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
+            if_pattern = 'if'
+            result = subprocess.run(
+                [ast_grep_cmd, 'run', '--pattern', if_pattern, '--lang', 'c', '--json', temp_file],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode == 0 and result.stdout.strip():
                 try:
                     matches = json.loads(result.stdout)
-                    structures.extend([('if', {'condition': 'if condition'}) for _ in matches])
-                except:
-                    pass
+                    if isinstance(matches, list):
+                        for match in matches:
+                            # Get position from byteOffset or line/column
+                            start = 0
+                            if 'range' in match:
+                                range_info = match['range']
+                                if 'byteOffset' in range_info:
+                                    start = range_info['byteOffset'].get('start', 0)
+                                elif 'start' in range_info:
+                                    start_info = range_info['start']
+                                    if 'line' in start_info:
+                                        # Use line number as approximate position
+                                        line = start_info.get('line', 0)
+                                        col = start_info.get('column', 0)
+                                        start = line * 1000 + col  # Approximate
+                            
+                            # Check for else-if by looking at the code
+                            code_snippet = function_code[start:start+500] if start < len(function_code) else ""
+                            has_else = 'else' in code_snippet
+                            is_else_if = 'else if' in code_snippet or 'elseif' in code_snippet
+                            
+                            structures.append({
+                                'type': 'if',
+                                'start': start,
+                                'has_else': has_else and not is_else_if,
+                                'is_else_if': is_else_if
+                            })
+                            logger.info(f"Found if statement at position {start}")
+                except (json.JSONDecodeError, KeyError) as e:
+                    logger.warning(f"Failed to parse if pattern results: {e}")
+                    logger.debug(f"ast-grep output: {result.stdout[:500]}")
 
             # Pattern for for loops
-            for_pattern = 'for ($INIT; $COND; $UPDATE) $BODY'
-            result = subprocess.run([ast_grep_cmd, 'run', '--pattern', for_pattern, '--lang', 'c', '--json', func_temp_file],
-                                  capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
+            for_pattern = 'for'
+            result = subprocess.run(
+                [ast_grep_cmd, 'run', '--pattern', for_pattern, '--lang', 'c', '--json', temp_file],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode == 0 and result.stdout.strip():
                 try:
                     matches = json.loads(result.stdout)
-                    structures.extend([('for', {'type': 'for loop'}) for _ in matches])
-                except:
-                    pass
+                    if isinstance(matches, list):
+                        for match in matches:
+                            start = 0
+                            if 'range' in match:
+                                range_info = match['range']
+                                if 'byteOffset' in range_info:
+                                    start = range_info['byteOffset'].get('start', 0)
+                                elif 'start' in range_info:
+                                    start_info = range_info['start']
+                                    if 'line' in start_info:
+                                        line = start_info.get('line', 0)
+                                        col = start_info.get('column', 0)
+                                        start = line * 1000 + col
+                            structures.append({
+                                'type': 'for',
+                                'start': start
+                            })
+                            logger.info(f"Found for loop at position {start}")
+                except (json.JSONDecodeError, KeyError) as e:
+                    logger.warning(f"Failed to parse for pattern results: {e}")
+                    logger.debug(f"ast-grep output: {result.stdout[:500]}")
 
             # Pattern for while loops
-            while_pattern = 'while ($CONDITION) $BODY'
-            result = subprocess.run([ast_grep_cmd, 'run', '--pattern', while_pattern, '--lang', 'c', '--json', func_temp_file],
-                                  capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
+            while_pattern = 'while'
+            result = subprocess.run(
+                [ast_grep_cmd, 'run', '--pattern', while_pattern, '--lang', 'c', '--json', temp_file],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode == 0 and result.stdout.strip():
                 try:
                     matches = json.loads(result.stdout)
-                    structures.extend([('while', {'type': 'while loop'}) for _ in matches])
-                except:
-                    pass
+                    if isinstance(matches, list):
+                        for match in matches:
+                            start = 0
+                            if 'range' in match:
+                                range_info = match['range']
+                                if 'byteOffset' in range_info:
+                                    start = range_info['byteOffset'].get('start', 0)
+                                elif 'start' in range_info:
+                                    start_info = range_info['start']
+                                    if 'line' in start_info:
+                                        line = start_info.get('line', 0)
+                                        col = start_info.get('column', 0)
+                                        start = line * 1000 + col
+                            structures.append({
+                                'type': 'while',
+                                'start': start
+                            })
+                            logger.info(f"Found while loop at position {start}")
+                except (json.JSONDecodeError, KeyError) as e:
+                    logger.warning(f"Failed to parse while pattern results: {e}")
 
             # Pattern for return statements
-            return_pattern = 'return $EXPR;'
-            result = subprocess.run([ast_grep_cmd, 'run', '--pattern', return_pattern, '--lang', 'c', '--json', func_temp_file],
-                                  capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
+            return_pattern = 'return'
+            result = subprocess.run(
+                [ast_grep_cmd, 'run', '--pattern', return_pattern, '--lang', 'c', '--json', temp_file],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode == 0 and result.stdout.strip():
                 try:
                     matches = json.loads(result.stdout)
-                    structures.extend([('return', {'type': 'return'}) for _ in matches])
-                except:
-                    pass
+                    if isinstance(matches, list):
+                        for match in matches:
+                            start = 0
+                            if 'range' in match:
+                                range_info = match['range']
+                                if 'byteOffset' in range_info:
+                                    start = range_info['byteOffset'].get('start', 0)
+                                elif 'start' in range_info:
+                                    start_info = range_info['start']
+                                    if 'line' in start_info:
+                                        line = start_info.get('line', 0)
+                                        col = start_info.get('column', 0)
+                                        start = line * 1000 + col
+                            structures.append({
+                                'type': 'return',
+                                'start': start
+                            })
+                            logger.info(f"Found return statement at position {start}")
+                except (json.JSONDecodeError, KeyError) as e:
+                    logger.warning(f"Failed to parse return pattern results: {e}")
 
-        finally:
-            try:
-                os.unlink(func_temp_file)
-            except OSError:
-                pass
+        except Exception as e:
+            logger.error(f"Error analyzing control structures: {e}")
 
+        # Sort by position in code
+        structures.sort(key=lambda x: x.get('start', 0))
+        logger.info(f"Found {len(structures)} control structures: {[s['type'] for s in structures]}")
         return structures
 
-    def _add_if_node(self, lines: list, prev_node: str, node_counter: int, details: dict) -> tuple:
-        """Add if-statement node to diagram"""
-        decision_node = f"N{node_counter}"
-        lines.append(f"    {prev_node} --> {decision_node}{{If condition}}")
-        node_counter += 1
+    def _build_flowchart_from_structures(self, function_name: str, structures: list, function_code: str) -> str:
+        """Build Mermaid flowchart from detected structures, handling nesting"""
+        diagram_lines = ["flowchart TD"]
+        diagram_lines.append(f"    START([{function_name}])")
+        
+        if not structures:
+            # Check if function has return statement
+            if 'return' in function_code.lower():
+                diagram_lines.append("    START --> RETURN[Return]")
+                diagram_lines.append("    RETURN --> END([End])")
+            else:
+                diagram_lines.append("    START --> END([End])")
+            return "\n".join(diagram_lines)
 
-        # Then branch
-        then_node = f"N{node_counter}"
-        lines.append(f"    {decision_node} -->|Yes| {then_node}[Then branch]")
-        node_counter += 1
+        # Build nodes and connections
+        node_id = 0
+        current_node = "START"
+        
+        for struct in structures:
+            struct_type = struct['type']
+            
+            if struct_type == 'for':
+                loop_node = f"FOR{node_id}"
+                body_node = f"FORBODY{node_id}"
+                exit_node = f"FOREXIT{node_id}"
+                
+                diagram_lines.append(f"    {current_node} --> {loop_node}{{For Loop}}")
+                diagram_lines.append(f"    {loop_node} -->|True| {body_node}[Loop Body]")
+                diagram_lines.append(f"    {body_node} --> {loop_node}")
+                diagram_lines.append(f"    {loop_node} -->|False| {exit_node}[Continue]")
+                
+                current_node = body_node
+                node_id += 1
+                
+            elif struct_type == 'while':
+                loop_node = f"WHILE{node_id}"
+                body_node = f"WHILEBODY{node_id}"
+                exit_node = f"WHILEEXIT{node_id}"
+                
+                diagram_lines.append(f"    {current_node} --> {loop_node}{{While}}")
+                diagram_lines.append(f"    {loop_node} -->|True| {body_node}[Body]")
+                diagram_lines.append(f"    {body_node} --> {loop_node}")
+                diagram_lines.append(f"    {loop_node} -->|False| {exit_node}[Continue]")
+                
+                current_node = body_node
+                node_id += 1
+                
+            elif struct_type == 'if':
+                if_node = f"IF{node_id}"
+                then_node = f"THEN{node_id}"
+                else_node = f"ELSE{node_id}"
+                merge_node = f"MERGE{node_id}"
+                
+                has_else = struct.get('has_else', False)
+                
+                diagram_lines.append(f"    {current_node} --> {if_node}{{If}}")
+                diagram_lines.append(f"    {if_node} -->|Yes| {then_node}[Then]")
+                
+                if has_else:
+                    diagram_lines.append(f"    {if_node} -->|No| {else_node}[Else]")
+                    diagram_lines.append(f"    {then_node} --> {merge_node}[Continue]")
+                    diagram_lines.append(f"    {else_node} --> {merge_node}")
+                else:
+                    diagram_lines.append(f"    {if_node} -->|No| {merge_node}[Continue]")
+                    diagram_lines.append(f"    {then_node} --> {merge_node}")
+                
+                current_node = merge_node
+                node_id += 1
+                
+            elif struct_type == 'return':
+                return_node = f"RETURN{node_id}"
+                diagram_lines.append(f"    {current_node} --> {return_node}[Return]")
+                diagram_lines.append(f"    {return_node} --> END([End])")
+                return "\n".join(diagram_lines)
 
-        # Merge point
-        merge_node = f"N{node_counter}"
-        lines.append(f"    {decision_node} --> {merge_node}[Continue]")
-        node_counter += 1
-
-        return merge_node, node_counter
-
-    def _add_for_node(self, lines: list, prev_node: str, node_counter: int, details: dict) -> tuple:
-        """Add for-loop node to diagram"""
-        loop_node = f"N{node_counter}"
-        lines.append(f"    {prev_node} --> {loop_node}{{For loop}}")
-        node_counter += 1
-
-        # Loop body
-        body_node = f"N{node_counter}"
-        lines.append(f"    {loop_node} -->|Continue| {body_node}[Loop body]")
-        node_counter += 1
-
-        # Loop back
-        lines.append(f"    {body_node} --> {loop_node}")
-
-        # Exit
-        exit_node = f"N{node_counter}"
-        lines.append(f"    {loop_node} -->|Exit| {exit_node}[Continue]")
-        node_counter += 1
-
-        return exit_node, node_counter
-
-    def _add_while_node(self, lines: list, prev_node: str, node_counter: int, details: dict) -> tuple:
-        """Add while-loop node to diagram"""
-        loop_node = f"N{node_counter}"
-        lines.append(f"    {prev_node} --> {loop_node}{{While condition}}")
-        node_counter += 1
-
-        # Loop body
-        body_node = f"N{node_counter}"
-        lines.append(f"    {loop_node} -->|True| {body_node}[Loop body]")
-        node_counter += 1
-
-        # Loop back
-        lines.append(f"    {body_node} --> {loop_node}")
-
-        # Exit
-        exit_node = f"N{node_counter}"
-        lines.append(f"    {loop_node} -->|False| {exit_node}[Continue]")
-        node_counter += 1
-
-        return exit_node, node_counter
-
-    def _add_return_node(self, lines: list, prev_node: str, node_counter: int, details: dict) -> tuple:
-        """Add return statement node to diagram"""
-        return_node = f"N{node_counter}"
-        lines.append(f"    {prev_node} --> {return_node}[Return]")
-        node_counter += 1
-
-        # End node
-        end_node = f"N{node_counter}"
-        lines.append(f"    {return_node} --> {end_node}[Function ends]")
-        node_counter += 1
-
-        return end_node, node_counter
-
+        # Connect to end
+        diagram_lines.append(f"    {current_node} --> END([End])")
+        return "\n".join(diagram_lines)
 
     def _generate_basic_mermaid(self, function_name: str) -> str:
         """Generate a basic Mermaid diagram as fallback"""
